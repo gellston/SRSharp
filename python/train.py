@@ -85,5 +85,6 @@ for epoch in range(1, epochs + 1):
 
     # 체크포인트 저장
     torch.save(model.state_dict(), os.path.join(save_dir, f"span_stage1_e{epoch:03d}.pth"))
+    torch.save(model.state_dict(), os.path.join(save_dir, f"final.pth"))
 
 cv2.destroyAllWindows()
