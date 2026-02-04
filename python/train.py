@@ -11,10 +11,10 @@ from model.span import SPAN30
 # Hyper parameter
 train_dir = r"C:\github\dataset\DIV2K_train_HR\DIV2K_train_HR"
 scale = 4
-hr_patch = 512
+hr_patch = 256
 batch_size = 16
-lr = 5e-4         
-epochs = 83334       
+lr = 1e-3    
+epochs = 1000       
 save_dir = r"C:\github\SRSharp\python\results"
 
 
@@ -54,6 +54,7 @@ for epoch in range(1, epochs + 1):
 
         optim.zero_grad(set_to_none=True)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optim.step()
 
         loss_sum += float(loss.item())

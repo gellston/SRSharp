@@ -276,5 +276,5 @@ class SPAN30(torch.nn.Module):
         out_final = self.conv_2(out_b6)
         out = self.conv_cat(torch.cat([out_feature, out_final, out_b1, out_b5_2], 1))
         output = self.upsampler(out)
-        output = torch.clamp(output, 0.0, 255.0)
+        #output = torch.clamp(output, 0.0, 255.0)
         return output
