@@ -13,7 +13,7 @@ train_dir = r"C:\github\dataset\DIV2K_train_HR\DIV2K_train_HR"
 scale = 4
 hr_patch = 256
 batch_size = 16
-lr = 1e-3    
+lr = 1e-4    
 epochs = 1000       
 save_dir = r"C:\github\SRSharp\python\results"
 
@@ -29,7 +29,7 @@ dl = DataLoader(ds, batch_size=batch_size, shuffle=True, pin_memory=True, drop_l
 
 model = SPAN30(num_in_ch=3, num_out_ch=3, feature_channels=48, upscale=scale, bias=True).to(device)
 criterion = nn.L1Loss()
-optim = torch.optim.Adam(model.parameters(), lr=lr)
+optim = torch.optim.RAdam(model.parameters(), lr=lr)
 
 cv2.namedWindow("input", cv2.WINDOW_NORMAL)
 cv2.namedWindow("output", cv2.WINDOW_NORMAL)
