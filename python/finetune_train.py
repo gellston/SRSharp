@@ -17,8 +17,8 @@ train_dir = r"C:\github\dataset\DIV2K_train_HR\DIV2K_train_HR"
 scale = 4
 hr_patch = 256
 batch_size = 16
-lr = 1e-4    
-epochs = 1000       
+lr = 1e-5    
+epochs = 100       
 save_dir = r"C:\github\SRSharp\python\results"
 load_dir = r"C:\github\SRSharp\python\results\final.pth"
 
