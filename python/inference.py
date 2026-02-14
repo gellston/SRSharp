@@ -8,8 +8,8 @@ from model.span import SPAN30
 # -----------------------
 # Config
 # -----------------------
-img_path    = r"C:\github\dataset\DIV2K_valid_LR_bicubic_X4\DIV2K_valid_LR_bicubic\X4\0869x4.png"
-weight_path = r"C:\github\SRSharp\python\results\final.pth"
+img_path    = r"C:\github\dataset\DIV2K_valid_LR_bicubic_X4\DIV2K_valid_LR_bicubic\X4\0838x4.png"
+weight_path = r"C:\github\SRSharp\python\results\finetune_final.pth"
 save_path   = r"C:\github\SRSharp\python\results\sr_output_tiled.png"
 
 scale  = 4
