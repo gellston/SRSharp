@@ -3,48 +3,18 @@ import torch.nn.functional as F
 
 
 
-def ICNR(tensor, upscale_factor=2, inizializer=torch.nn.init.kaiming_normal):
-    """Fills the input Tensor or Variable with values according to the method
-    described in "Checkerboard artifact free sub-pixel convolution"
-    - Andrew Aitken et al. (2017), this inizialization should be used in the
-    last convolutional layer before a PixelShuffle operation
-
-    Args:
-        tensor: an n-dimensional torch.Tensor or autograd.Variable
-        upscale_factor: factor to increase spatial resolution by
-        inizializer: inizializer to be used for sub_kernel inizialization
-
-    Examples:
-        >>> upscale = 8
-        >>> num_classes = 10
-        >>> previous_layer_features = Variable(torch.Tensor(8, 64, 32, 32))
-        >>> conv_shuffle = Conv2d(64, num_classes * (upscale ** 2), 3, padding=1, bias=0)
-        >>> ps = PixelShuffle(upscale)
-        >>> kernel = ICNR(conv_shuffle.weight, scale_factor=upscale)
-        >>> conv_shuffle.weight.data.copy_(kernel)
-        >>> output = ps(conv_shuffle(previous_layer_features))
-        >>> print(output.shape)
-        torch.Size([8, 10, 256, 256])
-
-    .. _Checkerboard artifact free sub-pixel convolution:
-        https://arxiv.org/abs/1707.02937
-    """
-    new_shape = [int(tensor.shape[0] / (upscale_factor ** 2))] + list(tensor.shape[1:])
-    subkernel = torch.zeros(new_shape)
-    subkernel = inizializer(subkernel)
-    subkernel = subkernel.transpose(0, 1)
-
-    subkernel = subkernel.contiguous().view(subkernel.shape[0],
-                                            subkernel.shape[1], -1)
-
-    kernel = subkernel.repeat(1, 1, upscale_factor ** 2)
-
-    transposed_shape = [tensor.shape[1]] + [tensor.shape[0]] + list(tensor.shape[2:])
-    kernel = kernel.contiguous().view(transposed_shape)
-
-    kernel = kernel.transpose(0, 1)
-
-    return kernel
+def ICNR(tensor, initializer, upscale_factor=2, *args, **kwargs):
+    "tensor: the 2-dimensional Tensor or more"
+    upscale_factor_squared = upscale_factor * upscale_factor
+    assert tensor.shape[0] % upscale_factor_squared == 0, \
+        ("The size of the first dimension: "
+         f"tensor.shape[0] = {tensor.shape[0]}"
+         " is not divisible by square of upscale_factor: "
+         f"upscale_factor = {upscale_factor}")
+    sub_kernel = torch.empty(tensor.shape[0] // upscale_factor_squared,
+                             *tensor.shape[1:])
+    sub_kernel = initializer(sub_kernel, *args, **kwargs)
+    return sub_kernel.repeat_interleave(upscale_factor_squared, dim=0)
 
 
 
@@ -298,11 +268,16 @@ class SPAN30(torch.nn.Module):
         self.conv_shuffle = torch.nn.Conv2d(feature_channels,
                                             out_channels * (upscale ** 2),
                                             padding=1,
-                                            kernel_size=3),
-        kernel = ICNR(self.conv_shuffle.weight, upscale)
-        self.conv_shuffle.weight.data.copy_(kernel)
+                                            kernel_size=3)
+        
+        weight = ICNR(self.conv_shuffle.weight, initializer=torch.nn.init.kaiming_normal_,
+                    upscale_factor=upscale)
+        self.conv_shuffle.weight.data.copy_(weight)   # initialize conv.weight
 
         self.upsampler = torch.nn.PixelShuffle(upscale)
+        self.refine = torch.nn.Conv2d(3, 3, 3, 1, 1, bias=True)
+        torch.nn.init.zeros_(self.refine.weight)
+        torch.nn.init.zeros_(self.refine.bias)
 
 
         self.eval().cuda()
@@ -325,6 +300,7 @@ class SPAN30(torch.nn.Module):
 
         out_final = self.conv_2(out_b6)
         out = self.conv_cat(torch.cat([out_feature, out_final, out_b1, out_b5_2], 1))
-        output = self.upsampler(out)
+        upsample = self.upsampler(out)
+        output = upsample + self.refine(upsample)
         #output = torch.clamp(output, 0.0, 255.0)
         return output

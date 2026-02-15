@@ -7,17 +7,15 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from datasets.srdataset import SRDataset
 from model.span import SPAN30
+from loss.charbonnierloss import CharbonnierLoss
 
 # Hyper parameter
 train_dir = r"C:\github\dataset\DIV2K_train_HR\DIV2K_train_HR"
-scale = 4
-hr_patch = 256
+scale = hr_patch = 256
 batch_size = 16
-lr = 1e-4    
-epochs = 1000       
+lr = 1e-4
+epochs = 500
 save_dir = r"C:\github\SRSharp\python\results"
-
-
 
 os.makedirs(save_dir, exist_ok=True)
 
@@ -28,8 +26,38 @@ ds = SRDataset(train_dir, hr_size=hr_patch, scale=scale)
 dl = DataLoader(ds, batch_size=batch_size, shuffle=True, pin_memory=True, drop_last=True)
 
 model = SPAN30(num_in_ch=3, num_out_ch=3, feature_channels=48, upscale=scale, bias=True).to(device)
-criterion = nn.L1Loss()
+criterion = CharbonnierLoss(eps=0.5)
 optim = torch.optim.RAdam(model.parameters(), lr=lr)
+
+# =========================
+# STEP 기반 LR Scheduler (Warmup + Cosine)
+# =========================
+steps_per_epoch = len(dl)
+total_steps = epochs * steps_per_epoch
+
+warmup_epochs = 5                 # 3~10 정도 추천
+warmup_steps = warmup_epochs * steps_per_epoch
+warmup_steps = min(warmup_steps, max(0, total_steps - 1))
+
+eta_min = 1e-6
+
+if warmup_steps > 0:
+    scheduler = torch.optim.lr_scheduler.SequentialLR(
+        optim,
+        schedulers=[
+            torch.optim.lr_scheduler.LinearLR(
+                optim, start_factor=0.1, end_factor=1.0, total_iters=warmup_steps
+            ),
+            torch.optim.lr_scheduler.CosineAnnealingLR(
+                optim, T_max=total_steps - warmup_steps, eta_min=eta_min
+            ),
+        ],
+        milestones=[warmup_steps],
+    )
+else:
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optim, T_max=total_steps, eta_min=eta_min
+    )
 
 cv2.namedWindow("input", cv2.WINDOW_NORMAL)
 cv2.namedWindow("output", cv2.WINDOW_NORMAL)
@@ -49,7 +77,6 @@ for epoch in range(1, epochs + 1):
         hr_img = hr_img.to(device, non_blocking=True)   # (B,3,hr,hr), float32 0~255
 
         sr = model(lr_img)
-
         loss = criterion(sr, hr_img)
 
         optim.zero_grad(set_to_none=True)
@@ -57,13 +84,15 @@ for epoch in range(1, epochs + 1):
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optim.step()
 
+        # ===== STEP 단위 스케줄러 업데이트 =====
+        scheduler.step()
+
         loss_sum += float(loss.item())
         n += 1
         global_step += 1
 
         last_lr = lr_img[0].detach().clamp(0, 255).to("cpu")
         last_sr = sr[0].detach().clamp(0, 255).to("cpu")
-
 
     model.eval()
     with torch.no_grad():
@@ -81,7 +110,8 @@ for epoch in range(1, epochs + 1):
 
     avg_loss = loss_sum / max(1, n)
     dt = time.time() - t0
-    print(f"[Epoch {epoch:03d}/{epochs}] loss={avg_loss:.4f} time={dt:.1f}s step={global_step}")
+    current_lr = optim.param_groups[0]["lr"]
+    print(f"[Epoch {epoch:03d}/{epochs}] loss={avg_loss:.4f} time={dt:.1f}s step={global_step} lr={current_lr:.2e}")
 
     # 체크포인트 저장
     torch.save(model.state_dict(), os.path.join(save_dir, f"span_stage1_e{epoch:03d}.pth"))
